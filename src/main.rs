@@ -15,6 +15,31 @@ struct Checkers {
     board: [[char; 8]; 8],
 }
 
+fn make_board(s: &str, num_cols: usize) -> [[char; 8]; 8] {
+    let mut board = [['.'; 8]; 8];
+
+    assert_eq!(s.len() % num_cols, 0);
+    let num_rows = s.len() / num_cols;
+
+    for i in 0..num_rows {
+        for j in 0..num_cols {
+            board[i][j] = s.chars().nth(i * num_cols + j).unwrap();
+        }
+    }
+    return board;
+}
+
+fn board_to_string(b: &[[char; 8]; 8]) -> String {
+    let mut as_str = String::new();
+    for row in b {
+        for square in row {
+            as_str.push(*square);
+        }
+        as_str.push('\n');
+    }
+    return as_str;
+}
+
 impl Checkers {
     fn new() -> Checkers {
         return Checkers::from(
@@ -36,17 +61,9 @@ impl Checkers {
     fn from(s: &str, t: Turn, num_cols: usize) -> Checkers {
         let mut ch = Checkers {
             turn: t,
-            board: [['.'; 8]; 8],
+            board: make_board(s, num_cols),
         };
 
-        assert_eq!(s.len() % num_cols, 0);
-        let num_rows = s.len() / num_cols;
-
-        for i in 0..num_rows {
-            for j in 0..num_cols {
-                ch.board[i][j] = s.chars().nth(i * num_cols + j).unwrap();
-            }
-        }
         return ch;
     }
 
@@ -230,6 +247,8 @@ impl Checkers {
         }
         return moves;
     }
+
+    fn make_step(&self, s: Step) {}
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -264,8 +283,10 @@ mod tests {
     use tokio_tungstenite::client_async;
 
     macro_rules! assert_boardequal {
-        ($a:ident, $b:ident) => {
-            assert_eq!($a, $b, "{}!=\n{}", $a, $b);
+        ($a:expr, $b:expr) => {
+            let a_str = board_to_string($a);
+            let b_str = board_to_string($b);
+            assert_eq!(a_str, b_str, "\n{}!=\n{}", a_str, b_str);
         };
     }
 
@@ -314,18 +335,20 @@ mod tests {
     #[tokio::test]
     async fn can_display_board() {
         let c = Checkers::new();
-        let got = format!("{}", c);
-        let expect = concat!(
-            ".w.w.w.w\n",
-            "w.w.w.w.\n",
-            ".w.w.w.w\n",
-            "........\n",
-            "........\n",
-            "b.b.b.b.\n",
-            ".b.b.b.b\n",
-            "b.b.b.b.\n"
+        let expect = make_board(
+            concat!(
+                ".w.w.w.w", //
+                "w.w.w.w.", //
+                ".w.w.w.w", //
+                "........", //
+                "........", //
+                "b.b.b.b.", //
+                ".b.b.b.b", //
+                "b.b.b.b.", //
+            ),
+            8,
         );
-        assert_boardequal!(got, expect);
+        assert_boardequal!(&c.board, &expect);
     }
 
     #[tokio::test]
@@ -443,6 +466,34 @@ mod tests {
                 ]
             }]
         );
+    }
+
+    #[tokio::test]
+    async fn can_step() {
+        let c = Checkers::from(
+            concat!(
+                "...", //
+                ".b.", //
+            ),
+            Turn::Black,
+            3,
+        );
+
+        c.make_step(Step {
+            src: (1, 1),
+            dst: (0, 0),
+            capture: None,
+        });
+
+        let expect = make_board(
+            concat!(
+                "b..", //
+                "..."  //
+            ),
+            3,
+        );
+
+        assert_boardequal!(&c.board, &expect);
     }
 }
 
