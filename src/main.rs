@@ -4,7 +4,7 @@ use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum Turn {
     Black,
     White,
@@ -19,14 +19,14 @@ impl Checkers {
     fn new() -> Checkers {
         return Checkers::from(
             concat!(
-                ".w.w.w.w\n",
-                "w.w.w.w.\n",
-                ".w.w.w.w\n",
-                "........\n",
-                "........\n",
-                "b.b.b.b.\n",
-                ".b.b.b.b\n",
-                "b.b.b.b.\n"
+                ".w.w.w.w", //
+                "w.w.w.w.", //
+                ".w.w.w.w", //
+                "........", //
+                "........", //
+                "b.b.b.b.", //
+                ".b.b.b.b", //
+                "b.b.b.b.", //
             ),
             Turn::Black,
             8,
@@ -54,15 +54,15 @@ impl Checkers {
         return false;
     }
 
-    fn has_opponent(turn: Turn, vboard: &[[char; 8]; 8], i: isize, j: isize) -> bool {
+    fn is_opponent(turn: Turn, vboard: &[[char; 8]; 8], i: isize, j: isize) -> bool {
         if i < 0 || j < 0 || i > 7 || j > 7 {
             return false;
         }
         let i = i as usize;
         let j = j as usize;
         return match turn {
-            Turn::Black => vboard[i][j] == 'b' || vboard[i][j] == 'B',
-            Turn::White => vboard[i][j] == 'w' || vboard[i][j] == 'W',
+            Turn::Black => vboard[i][j] == 'w' || vboard[i][j] == 'W',
+            Turn::White => vboard[i][j] == 'b' || vboard[i][j] == 'B',
         };
     }
     fn is_empty(vboard: &[[char; 8]; 8], i: isize, j: isize) -> bool {
@@ -74,56 +74,76 @@ impl Checkers {
         return vboard[i][j] == '.';
     }
 
-    fn get_moves_recursive(
+    fn get_jumps_recursive(
         turn: Turn,
         piece: char,
         i: isize,
         j: isize,
         moves: &mut Vec<Move>,
+        steps: &mut Vec<Step>,
         vboard: &mut [[char; 8]; 8],
     ) {
-        match turn {
-            Turn::Black => match piece {
-                'b' | 'B' => {}
-                _ => return,
-            },
-            Turn::White => match piece {
-                'w' | 'W' => {}
-                _ => return,
-            },
-        }
+        let mut maybe_add = |src_i: isize,
+                             src_j: isize,
+                             jump_i: isize,
+                             jump_j: isize,
+                             dst_i: isize,
+                             dst_j: isize| {
+            if Self::is_opponent(turn, &vboard, jump_i, jump_j) {
+                let jumped_piece = vboard[jump_i as usize][jump_j as usize];
+                steps.push(Step {
+                    src: (src_i as u8, src_j as u8),
+                    dst: (dst_i as u8, dst_j as u8),
+                    capture: Some(jumped_piece),
+                });
+
+                // Remove from vboard.
+                vboard[jump_i as usize][jump_j as usize] = '.';
+
+                // Recurse.
+                Self::get_jumps_recursive(turn, piece, dst_i, dst_j, moves, steps, vboard);
+
+                // Restore board.
+                let step = steps.pop().unwrap();
+                vboard[jump_i as usize][jump_j as usize] = step.capture.unwrap();
+                return true;
+            }
+            return false;
+        };
 
         match piece {
             'b' => {
                 // Check NW and NE.
-                if Self::is_empty(vboard, i - 1, j - 1) {
+                let has_any_jumps = maybe_add(i, j, i - 1, j - 1, i - 2, j - 2)
+                    || maybe_add(i, j, i - 1, j + 1, i - 2, j + 2);
+                if !has_any_jumps && steps.len() > 0 {
                     moves.push(Move {
-                        steps: vec![Step {
-                            src: (i as u8, j as u8),
-                            dst: ((i - 1) as u8, (j - 1) as u8),
-                            capture: false,
-                        }],
+                        steps: steps.clone(),
                     });
                 }
-
-                if Self::is_empty(vboard, i - 1, j + 1) {
-                    moves.push(Move {
-                        steps: vec![Step {
-                            src: (i as u8, j as u8),
-                            dst: ((i - 1) as u8, (j + 1) as u8),
-                            capture: false,
-                        }],
-                    });
-                }
-            }
-            'B' => {
-                // Check NW, NE, SW, SE.
             }
             'w' => {
                 // Check SW and SE.
+                let has_any_jumps = maybe_add(i, j, i + 1, j - 1, i + 2, j - 2)
+                    || maybe_add(i, j, i + 1, j + 1, i + 2, j + 2);
+                if !has_any_jumps && steps.len() > 0 {
+                    moves.push(Move {
+                        steps: steps.clone(),
+                    });
+                }
             }
-            'W' => {
-                // Check SW, SE, NW, NE.
+            'B' | 'W' => {
+                // Check NW, NE, SW, SE.
+                let has_any_jumps = maybe_add(i, j, i - 1, j - 1, i - 2, j - 2)
+                    || maybe_add(i, j, i - 1, j + 1, i - 2, j + 2)
+                    || maybe_add(i, j, i + 1, j - 1, i + 2, j - 2)
+                    || maybe_add(i, j, i + 1, j + 1, i + 2, j + 2);
+
+                if !has_any_jumps && steps.len() > 0 {
+                    moves.push(Move {
+                        steps: steps.clone(),
+                    });
+                }
             }
             _ => panic!("Unexpected"),
         }
@@ -133,23 +153,90 @@ impl Checkers {
         assert!(!(i < 0 || j < 0 || i > 7 || j > 7));
         let mut moves = Vec::<Move>::new();
         let mut vboard = self.board;
+
         // Remove self.
         let piece = vboard[i as usize][j as usize];
         vboard[i as usize][j as usize] = '.';
-        Self::get_moves_recursive(self.turn.clone(), piece, i, j, &mut moves, &mut vboard);
-        return moves;
-    }
 
-    fn make_move(&self, mv: Move) {
-        assert!(false);
+        match self.turn {
+            Turn::Black => match piece {
+                'b' | 'B' => {}
+                _ => return moves,
+            },
+            Turn::White => match piece {
+                'w' | 'W' => {}
+                _ => return moves,
+            },
+        }
+
+        let mut maybe_add = |src_i: isize, src_j: isize, dst_i: isize, dst_j: isize| {
+            if Self::is_empty(&vboard, dst_i, dst_j) {
+                moves.push(Move {
+                    steps: vec![Step {
+                        src: (src_i as u8, src_j as u8),
+                        dst: (dst_i as u8, dst_j as u8),
+                        capture: None,
+                    }],
+                });
+            }
+        };
+
+        match piece {
+            'b' => {
+                // Check NW and NE.
+                maybe_add(i, j, i - 1, j - 1);
+                maybe_add(i, j, i - 1, j + 1);
+            }
+            'w' => {
+                // Check SW and SE.
+                maybe_add(i, j, i + 1, j - 1);
+                maybe_add(i, j, i + 1, j + 1);
+            }
+            'B' | 'W' => {
+                // Check NW, NE, SW, SE.
+                maybe_add(i, j, i - 1, j - 1);
+                maybe_add(i, j, i - 1, j + 1);
+                maybe_add(i, j, i + 1, j - 1);
+                maybe_add(i, j, i + 1, j + 1);
+            }
+            _ => panic!("Unexpected"),
+        }
+
+        let mut steps = Vec::<Step>::new();
+        Self::get_jumps_recursive(
+            self.turn.clone(),
+            piece,
+            i,
+            j,
+            &mut moves,
+            &mut steps,
+            &mut vboard,
+        );
+
+        // If there are any moves with a capture, remove non-capture moves.
+        let mut has_capture = false;
+        for m in &moves {
+            if m.steps[0].capture.is_some() {
+                has_capture = true;
+                break;
+            }
+        }
+
+        if has_capture {
+            // Keep only moves that have a capture.
+            moves.retain(|el| {
+                return el.steps[0].capture.is_some();
+            });
+        }
+        return moves;
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Step {
     src: (u8, u8),
     dst: (u8, u8),
-    capture: bool,
+    capture: Option<char>,
 }
 
 // A Move may be a sequence of steps. Commonly it is a single step.
@@ -260,14 +347,14 @@ mod tests {
                     steps: vec![Step {
                         src: (1, 1),
                         dst: (0, 0),
-                        capture: false
+                        capture: None
                     }]
                 },
                 Move {
                     steps: vec![Step {
                         src: (1, 1),
                         dst: (0, 2),
-                        capture: false
+                        capture: None
                     }]
                 }
             ]
@@ -278,22 +365,22 @@ mod tests {
     async fn determines_capture() {
         let c = Checkers::from(
             concat!(
-                "...", //
-                ".w.", //
-                "..b", //
+                "....", //
+                ".w..", //
+                "..b.", //
             ),
             Turn::Black,
-            3,
+            4,
         );
 
-        let moves = c.get_moves(7, 0);
+        let moves = c.get_moves(2, 2);
         assert_eq!(
             moves,
             vec![Move {
                 steps: vec![Step {
                     src: (2, 2),
                     dst: (0, 0),
-                    capture: true
+                    capture: Some('w')
                 }]
             }]
         );
@@ -311,14 +398,14 @@ mod tests {
             4,
         );
 
-        let moves = c.get_moves(7, 0);
+        let moves = c.get_moves(2, 2);
         assert_eq!(
             moves,
             vec![Move {
                 steps: vec![Step {
                     src: (2, 2),
                     dst: (0, 0),
-                    capture: true
+                    capture: Some('w')
                 }]
             }]
         );
@@ -329,7 +416,7 @@ mod tests {
         let c = Checkers::from(
             concat!(
                 "....", //
-                ".w..", //
+                ".W..", //
                 "....", //
                 ".w..", //
                 "..b.", //
@@ -338,7 +425,7 @@ mod tests {
             4,
         );
 
-        let moves = c.get_moves(7, 0);
+        let moves = c.get_moves(4, 2);
         assert_eq!(
             moves,
             vec![Move {
@@ -346,12 +433,12 @@ mod tests {
                     Step {
                         src: (4, 2),
                         dst: (2, 0),
-                        capture: true
+                        capture: Some('w')
                     },
                     Step {
                         src: (2, 0),
                         dst: (0, 2),
-                        capture: true
+                        capture: Some('W')
                     }
                 ]
             }]
