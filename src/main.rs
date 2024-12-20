@@ -4,7 +4,7 @@ use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Turn {
     Black,
     White,
@@ -13,6 +13,7 @@ enum Turn {
 struct Checkers {
     turn: Turn,
     board: [[char; 8]; 8],
+    in_step: bool,
 }
 
 fn make_board(s: &str, num_cols: usize) -> [[char; 8]; 8] {
@@ -62,6 +63,7 @@ impl Checkers {
         let mut ch = Checkers {
             turn: t,
             board: make_board(s, num_cols),
+            in_step: false,
         };
 
         return ch;
@@ -111,7 +113,7 @@ impl Checkers {
                 steps.push(Step {
                     src: (src_i as u8, src_j as u8),
                     dst: (dst_i as u8, dst_j as u8),
-                    capture: Some(jumped_piece),
+                    capture: Some((jump_i as u8, jump_j as u8)),
                 });
 
                 // Remove from vboard.
@@ -121,8 +123,8 @@ impl Checkers {
                 Self::get_jumps_recursive(turn, piece, dst_i, dst_j, moves, steps, vboard);
 
                 // Restore board.
-                let step = steps.pop().unwrap();
-                vboard[jump_i as usize][jump_j as usize] = step.capture.unwrap();
+                steps.pop().unwrap();
+                vboard[jump_i as usize][jump_j as usize] = jumped_piece;
                 return true;
             }
             return false;
@@ -248,14 +250,39 @@ impl Checkers {
         return moves;
     }
 
-    fn make_step(&self, s: Step) {}
+    fn make_step(&mut self, s: Step) {
+        let moves = self.get_moves(s.src.0 as isize, s.src.1 as isize);
+        let mut found = false;
+        for ref m in moves {
+            if m.steps[0] == s {
+                found = true;
+                break;
+            }
+        }
+        assert!(found);
+        let piece = self.board[s.src.0 as usize][s.src.1 as usize];
+        self.board[s.src.0 as usize][s.src.1 as usize] = '.';
+        assert_eq!(self.board[s.dst.0 as usize][s.dst.1 as usize], '.');
+        self.board[s.dst.0 as usize][s.dst.1 as usize] = piece;
+        if s.capture.is_some() {
+            let jump_i = s.capture.unwrap().0;
+            let jump_j = s.capture.unwrap().0;
+            assert!(Self::is_opponent(
+                self.turn,
+                &self.board,
+                jump_i as isize,
+                jump_j as isize
+            ));
+            self.board[jump_i as usize][jump_j as usize] = '.';
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 struct Step {
     src: (u8, u8),
     dst: (u8, u8),
-    capture: Option<char>,
+    capture: Option<(u8, u8)>,
 }
 
 // A Move may be a sequence of steps. Commonly it is a single step.
@@ -403,7 +430,7 @@ mod tests {
                 steps: vec![Step {
                     src: (2, 2),
                     dst: (0, 0),
-                    capture: Some('w')
+                    capture: Some((1, 1))
                 }]
             }]
         );
@@ -428,7 +455,7 @@ mod tests {
                 steps: vec![Step {
                     src: (2, 2),
                     dst: (0, 0),
-                    capture: Some('w')
+                    capture: Some((1, 1))
                 }]
             }]
         );
@@ -456,12 +483,12 @@ mod tests {
                     Step {
                         src: (4, 2),
                         dst: (2, 0),
-                        capture: Some('w')
+                        capture: Some((3, 1))
                     },
                     Step {
                         src: (2, 0),
                         dst: (0, 2),
-                        capture: Some('W')
+                        capture: Some((1, 1))
                     }
                 ]
             }]
@@ -470,7 +497,7 @@ mod tests {
 
     #[tokio::test]
     async fn can_step() {
-        let c = Checkers::from(
+        let mut c = Checkers::from(
             concat!(
                 "...", //
                 ".b.", //
@@ -494,6 +521,70 @@ mod tests {
         );
 
         assert_boardequal!(&c.board, &expect);
+    }
+
+    #[tokio::test]
+    async fn can_jump() {
+        let mut c = Checkers::from(
+            concat!(
+                "...", //
+                ".w.", //
+                "..b", //
+            ),
+            Turn::Black,
+            3,
+        );
+
+        c.make_step(Step {
+            src: (2, 2),
+            dst: (0, 0),
+            capture: Some((1, 1)),
+        });
+
+        let expect = make_board(
+            concat!(
+                "b..", //
+                "...", //
+                "...", //
+            ),
+            3,
+        );
+
+        assert_boardequal!(&c.board, &expect);
+        assert_eq!(c.turn, Turn::White);
+
+        #[tokio::test]
+        async fn can_jump_sequence() {
+            let mut c = Checkers::from(
+                concat!(
+                    "....", //
+                    "....", //
+                    ".w..", //
+                    "....", //
+                    "..w.", //
+                    "...b", //
+                ),
+                Turn::Black,
+                3,
+            );
+    
+            c.make_step(Step {
+                src: (2, 2),
+                dst: (0, 0),
+                capture: Some((1, 1)),
+            });
+    
+            let expect = make_board(
+                concat!(
+                    "b..", //
+                    "...", //
+                    "...", //
+                ),
+                3,
+            );
+    
+            assert_boardequal!(&c.board, &expect);
+            assert_eq!(c.turn, Turn::White);
     }
 }
 
