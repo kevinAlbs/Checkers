@@ -109,6 +109,26 @@ impl Checkers {
                     Turn::Black => Turn::White,
                 }
             }
+        } else {
+            // Regular move. Switch turn.
+            self.turn = match self.turn {
+                Turn::White => Turn::Black,
+                Turn::Black => Turn::White,
+            }
+        }
+        // Check if piece is promoted to king.
+        match piece {
+            'w' => {
+                if s.dst.0 == 7 {
+                    self.board[s.dst.0 as usize][s.dst.1 as usize] = 'W';
+                }
+            }
+            'b' => {
+                if s.dst.0 == 0 {
+                    self.board[s.dst.0 as usize][s.dst.1 as usize] = 'B';
+                }
+            }
+            _ => {}
         }
     }
 
