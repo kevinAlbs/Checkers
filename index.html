@@ -39,10 +39,14 @@
         init().then(() => {
             let checkers = new Checkers();
             let board = [];
-            let selectedEl = null;
+            let selected = null; // or { i, j }
+            let fixed = false;
 
             function clear_selected_square() {
-                selectedEl = null;
+                if (fixed) {
+                    return;
+                }
+                selected = null;
                 for (let i = 0; i < 8; i++) {
                     for (let j = 0; j < 8; j++) {
                         board[i][j].step = null;
@@ -50,13 +54,8 @@
                 }
             }
 
-            function square_clicked(i, j) {
-                let square = board[i][j];
-                if (square.step !== null) {
-                    checkers.make_step(square.step);
-                    clear_selected_square();
-                    render();
-                    // TODO: if this is a jump sequence, fix selected square?
+            function select_square(i, j) {
+                if (fixed) {
                     return;
                 }
                 clear_selected_square();
@@ -64,7 +63,27 @@
                 steps.forEach((step) => {
                     board[step.dst_i][step.dst_j].step = step;
                 });
-                selectedEl = square.el;
+                selected = { i: i, j: j };
+            }
+
+
+            function square_clicked(i, j) {
+                let square = board[i][j];
+                if (square.step !== null) {
+                    checkers.make_step(square.step);
+                    fixed = false;
+                    // If this is a jump sequence, fix selected square.
+                    if (checkers.get_steps(i, j).length != 0) {
+                        select_square(i, j);
+                        fixed = true;
+                    } else {
+                        clear_selected_square();
+                    }
+                    render();
+                    return;
+                }
+
+                select_square(i, j);
                 render();
             }
 
@@ -105,8 +124,8 @@
                         board[i][j].el.classList.remove("selected");
                     }
                 }
-                if (selectedEl !== null) {
-                    selectedEl.classList.add("selected");
+                if (selected !== null) {
+                    board[selected.i][selected.j].el.classList.add("selected");
                 }
             }
 
