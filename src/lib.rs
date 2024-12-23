@@ -6,33 +6,50 @@ enum Turn {
     White,
 }
 
+struct Board {
+    data: [[char; 8]; 8],
+}
+
+impl Board {
+    fn get(&self, i: i8, j: i8) -> char {
+        assert!(Self::contains(i, j));
+        return self.data[i as usize][j as usize];
+    }
+    fn set(&mut self, i: i8, j: i8, v: char) {
+        assert!(Self::contains(i, j));
+        self.data[i as usize][j as usize] = v;
+    }
+    fn contains(i: i8, j: i8) -> bool {
+        return i >= 0 && i <= 7 && j >= 0 && j <= 7;
+    }
+    fn from_strings(s: Vec<&str>) -> Board {
+        let mut board = Board {
+            data: [['.'; 8]; 8],
+        };
+        for i in 0..s.len() {
+            for j in 0..s[i].len() {
+                board.data[i][j] = s[i].chars().nth(j).unwrap();
+            }
+        }
+        return board;
+    }
+    fn to_string(&self) -> String {
+        let mut as_str = String::new();
+        for row in self.data {
+            for square in row {
+                as_str.push(square);
+            }
+            as_str.push('\n');
+        }
+        return as_str;
+    }
+}
+
 #[wasm_bindgen]
 struct Checkers {
     turn: Turn,
-    board: [[char; 8]; 8],
-    in_step: Option<(u8, u8)>,
-}
-
-fn make_board(s: Vec<&str>) -> [[char; 8]; 8] {
-    let mut board = [['.'; 8]; 8];
-
-    for i in 0..s.len() {
-        for j in 0..s[i].len() {
-            board[i][j] = s[i].chars().nth(j).unwrap();
-        }
-    }
-    return board;
-}
-
-fn board_to_string(b: &[[char; 8]; 8]) -> String {
-    let mut as_str = String::new();
-    for row in b {
-        for square in row {
-            as_str.push(*square);
-        }
-        as_str.push('\n');
-    }
-    return as_str;
+    board: Board,
+    in_step: Option<(i8, i8)>,
 }
 
 #[wasm_bindgen]
@@ -57,7 +74,7 @@ impl Checkers {
     fn from(s: Vec<&str>, t: Turn) -> Checkers {
         let ch = Checkers {
             turn: t,
-            board: make_board(s),
+            board: Board::from_strings(s),
             in_step: None,
         };
 
@@ -65,11 +82,11 @@ impl Checkers {
     }
 
     #[wasm_bindgen]
-    pub fn at(&self, i: isize, j: isize) -> char {
-        if i < 0 || j < 0 || i > 7 || j > 7 {
+    pub fn at(&self, i: i8, j: i8) -> char {
+        if !Board::contains(i, j) {
             return '?';
         }
-        return self.board[i as usize][j as usize];
+        return self.board.get(i, j);
     }
 
     #[wasm_bindgen]
@@ -80,46 +97,38 @@ impl Checkers {
         };
     }
 
-    fn is_opponent(turn: Turn, vboard: &[[char; 8]; 8], i: isize, j: isize) -> bool {
-        if i < 0 || j < 0 || i > 7 || j > 7 {
+    fn is_opponent(&self, i: i8, j: i8) -> bool {
+        if !Board::contains(i, j) {
             return false;
         }
-        let i = i as usize;
-        let j = j as usize;
-        return match turn {
-            Turn::Black => vboard[i][j] == 'w' || vboard[i][j] == 'W',
-            Turn::White => vboard[i][j] == 'b' || vboard[i][j] == 'B',
+        let square = self.board.get(i, j);
+        return match self.turn {
+            Turn::Black => square == 'w' || square == 'W',
+            Turn::White => square == 'b' || square == 'B',
         };
     }
-    fn is_empty(vboard: &[[char; 8]; 8], i: isize, j: isize) -> bool {
-        if i < 0 || j < 0 || i > 7 || j > 7 {
+    fn is_empty(&self, i: i8, j: i8) -> bool {
+        if !Board::contains(i, j) {
             return false;
         }
-        let i = i as usize;
-        let j = j as usize;
-        return vboard[i][j] == '.';
+        return self.board.get(i, j) == '.';
     }
 
     #[wasm_bindgen]
     pub fn make_step(&mut self, s: Step) {
-        let steps = self.get_steps(s.src.0 as usize, s.src.1 as usize);
+        let steps = self.get_steps(s.src.0, s.src.1);
         assert!(steps.contains(&s));
-        let piece = self.board[s.src.0 as usize][s.src.1 as usize];
-        self.board[s.src.0 as usize][s.src.1 as usize] = '.';
-        assert_eq!(self.board[s.dst.0 as usize][s.dst.1 as usize], '.');
-        self.board[s.dst.0 as usize][s.dst.1 as usize] = piece;
+        let piece = self.board.get(s.src.0, s.src.1);
+        self.board.set(s.src.0, s.src.1, '.');
+        assert_eq!(self.board.get(s.dst.0, s.dst.1), '.');
+        self.board.set(s.dst.0, s.dst.1, piece);
         if s.capture.is_some() {
             let jump_i = s.capture.unwrap().0;
             let jump_j = s.capture.unwrap().1;
-            assert!(Self::is_opponent(
-                self.turn,
-                &self.board,
-                jump_i as isize,
-                jump_j as isize
-            ));
-            self.board[jump_i as usize][jump_j as usize] = '.';
+            assert!(self.is_opponent(jump_i, jump_j));
+            self.board.set(jump_i, jump_j, '.');
             self.in_step = Some((s.dst.0, s.dst.1));
-            if self.get_steps(s.dst.0 as usize, s.dst.1 as usize).len() == 0 {
+            if self.get_steps(s.dst.0, s.dst.1).len() == 0 {
                 // No further jumps are possible. Switch turn.
                 self.in_step = None;
                 self.turn = match self.turn {
@@ -138,12 +147,12 @@ impl Checkers {
         match piece {
             'w' => {
                 if s.dst.0 == 7 {
-                    self.board[s.dst.0 as usize][s.dst.1 as usize] = 'W';
+                    self.board.set(s.dst.0, s.dst.1, 'W');
                 }
             }
             'b' => {
                 if s.dst.0 == 0 {
-                    self.board[s.dst.0 as usize][s.dst.1 as usize] = 'B';
+                    self.board.set(s.dst.0, s.dst.1, 'B');
                 }
             }
             _ => {}
@@ -152,7 +161,7 @@ impl Checkers {
 
     // Return all steps for a position.
     #[wasm_bindgen]
-    pub fn get_steps(&self, i: usize, j: usize) -> Vec<Step> {
+    pub fn get_steps(&self, i: i8, j: i8) -> Vec<Step> {
         // Check if any piece can capture.
         let mut other_has_capture = false;
         'outer: for oi in 0..8 {
@@ -178,8 +187,8 @@ impl Checkers {
     }
 
     // Does not account other pieces capturing.
-    fn get_steps_local(&self, i: usize, j: usize) -> Vec<Step> {
-        let piece = self.board[i][j];
+    fn get_steps_local(&self, i: i8, j: i8) -> Vec<Step> {
+        let piece = self.board.get(i, j);
 
         // Ensure piece matches turn.
         match self.turn {
@@ -197,7 +206,7 @@ impl Checkers {
 
         match self.in_step {
             Some(in_step) => {
-                if in_step != (i as u8, j as u8) {
+                if in_step != (i, j) {
                     // If in a jump sequence, only the piece that made the jump can make the next step.
                     return vec![];
                 }
@@ -206,16 +215,14 @@ impl Checkers {
         }
 
         let mut steps = Vec::<Step>::new();
-        let i: isize = i as isize;
-        let j: isize = j as isize;
 
         if self.in_step.is_none() {
             // Check for ordinary move.
-            let mut maybe_step = |src_i: isize, src_j: isize, dst_i: isize, dst_j: isize| {
-                if Self::is_empty(&self.board, dst_i, dst_j) {
+            let mut maybe_step = |src_i: i8, src_j: i8, dst_i: i8, dst_j: i8| {
+                if self.is_empty(dst_i, dst_j) {
                     steps.push(Step {
-                        src: (src_i as u8, src_j as u8),
-                        dst: (dst_i as u8, dst_j as u8),
+                        src: (src_i, src_j),
+                        dst: (dst_i, dst_j),
                         capture: None,
                     });
                 }
@@ -243,22 +250,16 @@ impl Checkers {
             }
         }
 
-        let mut maybe_jump = |src_i: isize,
-                              src_j: isize,
-                              jump_i: isize,
-                              jump_j: isize,
-                              dst_i: isize,
-                              dst_j: isize| {
-            if Self::is_opponent(self.turn, &self.board, jump_i, jump_j)
-                && Self::is_empty(&self.board, dst_i, dst_j)
-            {
-                steps.push(Step {
-                    src: (src_i as u8, src_j as u8),
-                    dst: (dst_i as u8, dst_j as u8),
-                    capture: Some((jump_i as u8, jump_j as u8)),
-                });
-            }
-        };
+        let mut maybe_jump =
+            |src_i: i8, src_j: i8, jump_i: i8, jump_j: i8, dst_i: i8, dst_j: i8| {
+                if self.is_opponent(jump_i, jump_j) && self.is_empty(dst_i, dst_j) {
+                    steps.push(Step {
+                        src: (src_i, src_j),
+                        dst: (dst_i, dst_j),
+                        capture: Some((jump_i, jump_j)),
+                    });
+                }
+            };
 
         match piece {
             'b' => {
@@ -304,36 +305,36 @@ impl Checkers {
 #[wasm_bindgen]
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct Step {
-    src: (u8, u8),
-    dst: (u8, u8),
-    capture: Option<(u8, u8)>,
+    src: (i8, i8),
+    dst: (i8, i8),
+    capture: Option<(i8, i8)>,
 }
 
 #[wasm_bindgen]
 impl Step {
     #[wasm_bindgen(getter)]
-    pub fn src_i(&self) -> u8 {
+    pub fn src_i(&self) -> i8 {
         return self.src.0;
     }
     #[wasm_bindgen(getter)]
-    pub fn src_j(&self) -> u8 {
+    pub fn src_j(&self) -> i8 {
         return self.src.1;
     }
     #[wasm_bindgen(getter)]
-    pub fn dst_i(&self) -> u8 {
+    pub fn dst_i(&self) -> i8 {
         return self.dst.0;
     }
     #[wasm_bindgen(getter)]
-    pub fn dst_j(&self) -> u8 {
+    pub fn dst_j(&self) -> i8 {
         return self.dst.1;
     }
 }
 
 impl std::fmt::Display for Checkers {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        for i in 0..self.board.len() {
-            for j in 0..self.board[i].len() {
-                write!(f, "{}", self.board[i][j] as char)?;
+        for i in 0..8 {
+            for j in 0..8 {
+                write!(f, "{}", self.board.get(i, j))?;
             }
             write!(f, "\n")?;
         }
@@ -347,8 +348,8 @@ mod tests {
 
     macro_rules! assert_boardequal {
         ($a:expr, $b:expr) => {
-            let a_str = board_to_string($a);
-            let b_str = board_to_string($b);
+            let a_str = $a.to_string();
+            let b_str = $b.to_string();
             assert_eq!(a_str, b_str, "\n{}!=\n{}", a_str, b_str);
         };
     }
@@ -356,7 +357,7 @@ mod tests {
     #[test]
     fn can_display_board() {
         let c = Checkers::new();
-        let expect = make_board(vec![
+        let expect = Board::from_strings(vec![
             ".w.w.w.w", //
             "w.w.w.w.", //
             ".w.w.w.w", //
@@ -515,7 +516,7 @@ mod tests {
             capture: None,
         });
 
-        let expect = make_board(vec![
+        let expect = Board::from_strings(vec![
             "..", //
             "w.", //
         ]);
@@ -540,7 +541,7 @@ mod tests {
             capture: Some((1, 2)),
         });
 
-        let expect = make_board(vec![
+        let expect = Board::from_strings(vec![
             "....", //
             "....", //
             "...w", //
@@ -592,7 +593,7 @@ mod tests {
             capture: Some((1, 2)),
         });
 
-        let expect = make_board(vec![
+        let expect = Board::from_strings(vec![
             "....", //
             "....", //
             "...w", //
@@ -620,7 +621,7 @@ mod tests {
             capture: None,
         });
 
-        let expect = make_board(vec![
+        let expect = Board::from_strings(vec![
             ".B", //
             "..", //
         ]);
