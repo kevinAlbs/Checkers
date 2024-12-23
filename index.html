@@ -3,38 +3,88 @@
 
 <head>
     <meta charset="utf-8" />
+    <link rel="icon" type="image/png" href="checker-piece.PNG" />
     <title>Checkers</title>
     <style type="text/css">
-        #game {
+        #container {
             width: 336px;
-            border: 1px black solid;
+            margin: 10px auto;
         }
 
-        #game .row {
+        #game {
+            display: inline-block;
+            border: 1px #222 solid;
+            background: #fffad0;
+        }
+
+        .row {
             display: flex;
         }
 
-        #game .square {
-            border: 1px black solid;
+        .square {
+            border: 1px #444 solid;
+            background: #BBB;
             width: 40px;
             height: 40px;
+            position: relative;
+        }
+
+        .square.odd {
+            background: #EEE;
         }
 
         .square.shown-step {
-            background: #0F0;
+            background: rgb(161, 255, 161);
+        }
+
+        .piece {
+            border-radius: 18px;
+            position: relative;
+            background: #EEE;
+            width: 30px;
+            height: 30px;
+            border: 2px #444 solid;
+            top: 3px;
+            left: 3px;
+            display: inline-block;
+            cursor: default;
+        }
+
+        .K {
+            display: none;
+            font-family: monospace;
+            font-size: 26px;
+            text-align: center;
+            position: absolute;
+            width: 100%;
+        }
+
+        .square[data-piece="."] .piece {
+            display: none;
+        }
+
+        .square[data-piece=b] .piece,
+        .square[data-piece=B] .piece {
+            background: #888;
+        }
+
+        .square[data-piece=B] .K {
+            display: block;
+            color: #EEE;
+        }
+
+        .square[data-piece=W] .K {
+            display: block;
+            color: #444;
         }
     </style>
 </head>
 
 <body>
-    <div id="game">
+    <div id="container">
+        <div id="game"></div>
     </div>
     <script type="module">
-
-
-        // import * as exports from './pkg/checkers.js';
-        // Object.entries(exports).forEach(([name, exported]) => window[name] = exported);
-
         import init, { Checkers } from "./pkg/checkers.js";
         init().then(() => {
             let checkers = new Checkers();
@@ -108,8 +158,8 @@
                 for (let j = 0; j < 8; j++) {
                     let squareEl = document.createElement("div");
                     squareEl.classList.add("square");
-                    // square.setAttribute("data-i", i);
-                    // square.setAttribute("data-j", j);
+                    squareEl.classList.toggle("odd", (i + j) % 2 == 0);
+                    squareEl.innerHTML = "<div class='piece'><div class='K'>K</div></div>";
                     squareEl.addEventListener("click", () => { square_clicked(i, j) })
                     rowEl.appendChild(squareEl);
                     board[i][j].el = squareEl;
@@ -119,7 +169,7 @@
             function render() {
                 for (let i = 0; i < 8; i++) {
                     for (let j = 0; j < 8; j++) {
-                        board[i][j].el.innerHTML = checkers.at(i, j);
+                        board[i][j].el.setAttribute("data-piece", checkers.at(i, j));
                         board[i][j].el.classList.toggle("shown-step", board[i][j].step != null);
                         board[i][j].el.classList.remove("selected");
                     }
