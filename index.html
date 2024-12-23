@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en-US">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Checkers</title>
+    <style type="text/css">
+        #game {
+            width: 336px;
+            border: 1px black solid;
+        }
+
+        #game .row {
+            display: flex;
+        }
+
+        #game .square {
+            border: 1px black solid;
+            width: 40px;
+            height: 40px;
+        }
+
+        .square.shown-step {
+            background: #0F0;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game">
+    </div>
+    <script type="module">
+
+
+        // import * as exports from './pkg/checkers.js';
+        // Object.entries(exports).forEach(([name, exported]) => window[name] = exported);
+
+        import init, { Checkers } from "./pkg/checkers.js";
+        init().then(() => {
+            let checkers = new Checkers();
+            let board = [];
+            let selectedEl = null;
+
+            function clear_selected_square() {
+                selectedEl = null;
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        board[i][j].step = null;
+                    }
+                }
+            }
+
+            function square_clicked(i, j) {
+                let square = board[i][j];
+                if (square.step !== null) {
+                    checkers.make_step(square.step);
+                    clear_selected_square();
+                    render();
+                    // TODO: if this is a jump sequence, fix selected square?
+                    return;
+                }
+                clear_selected_square();
+                let steps = checkers.get_steps(i, j);
+                steps.forEach((step) => {
+                    board[step.dst_i][step.dst_j].step = step;
+                });
+                selectedEl = square.el;
+                render();
+            }
+
+            // Create board.
+            for (let i = 0; i < 8; i++) {
+                let row = [];
+                for (let j = 0; j < 8; j++) {
+                    row.push({
+                        el: null, // Set later.
+                        step: null
+                    })
+                }
+                board.push(row);
+            }
+
+            // Add HTML elements.
+            const gameEl = document.querySelector("#game");
+            for (let i = 0; i < 8; i++) {
+                let rowEl = document.createElement("div");
+                rowEl.classList.add("row");
+                gameEl.appendChild(rowEl);
+                for (let j = 0; j < 8; j++) {
+                    let squareEl = document.createElement("div");
+                    squareEl.classList.add("square");
+                    // square.setAttribute("data-i", i);
+                    // square.setAttribute("data-j", j);
+                    squareEl.addEventListener("click", () => { square_clicked(i, j) })
+                    rowEl.appendChild(squareEl);
+                    board[i][j].el = squareEl;
+                }
+            }
+
+            function render() {
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        board[i][j].el.innerHTML = checkers.at(i, j);
+                        board[i][j].el.classList.toggle("shown-step", board[i][j].step != null);
+                        board[i][j].el.classList.remove("selected");
+                    }
+                }
+                if (selectedEl !== null) {
+                    selectedEl.classList.add("selected");
+                }
+            }
+
+            render();
+        });
+    </script>
+</body>
+
+</html>
