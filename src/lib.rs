@@ -1,9 +1,12 @@
+use wasm_bindgen::prelude::*;
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Turn {
     Black,
     White,
 }
 
+#[wasm_bindgen]
 struct Checkers {
     turn: Turn,
     board: [[char; 8]; 8],
@@ -32,8 +35,10 @@ fn board_to_string(b: &[[char; 8]; 8]) -> String {
     return as_str;
 }
 
+#[wasm_bindgen]
 impl Checkers {
-    fn new() -> Checkers {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Checkers {
         return Checkers::from(
             vec![
                 ".w.w.w.w", //
@@ -50,7 +55,7 @@ impl Checkers {
     }
 
     fn from(s: Vec<&str>, t: Turn) -> Checkers {
-        let mut ch = Checkers {
+        let ch = Checkers {
             turn: t,
             board: make_board(s),
             in_step: None,
@@ -59,8 +64,20 @@ impl Checkers {
         return ch;
     }
 
-    fn can_move_to(&self, src: (usize, usize), dst: (usize, usize)) -> bool {
-        return false;
+    #[wasm_bindgen]
+    pub fn at(&self, i: isize, j: isize) -> char {
+        if i < 0 || j < 0 || i > 7 || j > 7 {
+            return '?';
+        }
+        return self.board[i as usize][j as usize];
+    }
+
+    #[wasm_bindgen]
+    pub fn get_turn(&self) -> char {
+        return match self.turn {
+            Turn::Black => 'b',
+            Turn::White => 'w',
+        };
     }
 
     fn is_opponent(turn: Turn, vboard: &[[char; 8]; 8], i: isize, j: isize) -> bool {
@@ -83,7 +100,8 @@ impl Checkers {
         return vboard[i][j] == '.';
     }
 
-    fn make_step(&mut self, s: Step) {
+    #[wasm_bindgen]
+    pub fn make_step(&mut self, s: Step) {
         let steps = self.get_steps(s.src.0 as usize, s.src.1 as usize);
         assert!(steps.contains(&s));
         let piece = self.board[s.src.0 as usize][s.src.1 as usize];
@@ -133,15 +151,66 @@ impl Checkers {
     }
 
     // Return all steps for a position.
-    fn get_steps(&self, i: usize, j: usize) -> Vec<Step> {
-        let mut steps = Vec::<Step>::new();
+    #[wasm_bindgen]
+    pub fn get_steps(&self, i: usize, j: usize) -> Vec<Step> {
+        // Check if any piece can capture.
+        let mut other_has_capture = false;
+        'outer: for oi in 0..8 {
+            for oj in 0..8 {
+                if oi == i && oj == j {
+                    // Skip self.
+                    continue;
+                }
+                let steps = self.get_steps_local(oi, oj);
+                other_has_capture = steps.len() > 0 && steps[0].capture.is_some();
+                if other_has_capture {
+                    break 'outer;
+                }
+            }
+        }
+
+        let steps = self.get_steps_local(i, j);
+        let has_capture = steps.len() > 0 && steps[0].capture.is_some();
+        if !has_capture && other_has_capture {
+            return vec![];
+        }
+        return steps;
+    }
+
+    // Does not account other pieces capturing.
+    fn get_steps_local(&self, i: usize, j: usize) -> Vec<Step> {
         let piece = self.board[i][j];
 
+        // Ensure piece matches turn.
+        match self.turn {
+            Turn::Black => {
+                if piece != 'b' && piece != 'B' {
+                    return vec![];
+                }
+            }
+            Turn::White => {
+                if piece != 'w' && piece != 'W' {
+                    return vec![];
+                }
+            }
+        }
+
+        match self.in_step {
+            Some(in_step) => {
+                if in_step != (i as u8, j as u8) {
+                    // If in a jump sequence, only the piece that made the jump can make the next step.
+                    return vec![];
+                }
+            }
+            None => {}
+        }
+
+        let mut steps = Vec::<Step>::new();
         let i: isize = i as isize;
         let j: isize = j as isize;
 
-        // Can make an ordinary move if not in the middle of a jump sequence.
         if self.in_step.is_none() {
+            // Check for ordinary move.
             let mut maybe_step = |src_i: isize, src_j: isize, dst_i: isize, dst_j: isize| {
                 if Self::is_empty(&self.board, dst_i, dst_j) {
                     steps.push(Step {
@@ -180,7 +249,9 @@ impl Checkers {
                               jump_j: isize,
                               dst_i: isize,
                               dst_j: isize| {
-            if Self::is_opponent(self.turn, &self.board, jump_i, jump_j) {
+            if Self::is_opponent(self.turn, &self.board, jump_i, jump_j)
+                && Self::is_empty(&self.board, dst_i, dst_j)
+            {
                 steps.push(Step {
                     src: (src_i as u8, src_j as u8),
                     dst: (dst_i as u8, dst_j as u8),
@@ -225,15 +296,37 @@ impl Checkers {
                 return el.capture.is_some();
             });
         }
+
         return steps;
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[wasm_bindgen]
+#[derive(Debug, PartialEq, Clone, Copy)]
 struct Step {
     src: (u8, u8),
     dst: (u8, u8),
     capture: Option<(u8, u8)>,
+}
+
+#[wasm_bindgen]
+impl Step {
+    #[wasm_bindgen(getter)]
+    pub fn src_i(&self) -> u8 {
+        return self.src.0;
+    }
+    #[wasm_bindgen(getter)]
+    pub fn src_j(&self) -> u8 {
+        return self.src.1;
+    }
+    #[wasm_bindgen(getter)]
+    pub fn dst_i(&self) -> u8 {
+        return self.dst.0;
+    }
+    #[wasm_bindgen(getter)]
+    pub fn dst_j(&self) -> u8 {
+        return self.dst.1;
+    }
 }
 
 impl std::fmt::Display for Checkers {
@@ -347,6 +440,43 @@ mod tests {
     }
 
     #[test]
+    fn requires_capture_for_other_piece() {
+        let c = Checkers::from(
+            vec![
+                ".w...w", //
+                "..b...", //
+            ],
+            Turn::White,
+        );
+
+        let steps = c.get_steps(0, 5);
+        assert_eq!(steps, vec![]);
+    }
+
+    #[test]
+    fn requires_jump_sequence_to_continue() {
+        let mut c = Checkers::from(
+            vec![
+                ".w....", //
+                "..b.b.", //
+                ".....w", //
+                "..b.b.", //
+            ],
+            Turn::White,
+        );
+
+        c.make_step(Step {
+            src: (0, 1),
+            dst: (2, 3),
+            capture: Some((1, 2)),
+        });
+
+        // Still in sequence. Expect other white piece cannot jump.
+        let steps = c.get_steps(2, 5);
+        assert_eq!(steps, vec![]);
+    }
+
+    #[test]
     fn determines_capture_sequence() {
         let c = Checkers::from(
             vec![
@@ -416,9 +546,33 @@ mod tests {
             "...w", //
         ]);
 
+        let got = c.get_steps(2, 3);
+        assert_eq!(got, vec![]);
         assert_boardequal!(&c.board, &expect);
         assert_eq!(c.turn, Turn::Black);
     }
+
+    #[test]
+    fn checks_jump_destination_is_empty() {
+        let mut c = Checkers::from(
+            vec![
+                ".w..", //
+                "..b.", //
+                "...b", //
+            ],
+            Turn::White,
+        );
+
+        let got = c.get_steps(0, 1);
+        let expect = vec![Step {
+            src: (0, 1),
+            dst: (1, 0),
+            capture: None,
+        }];
+
+        assert_eq!(got, expect);
+    }
+
     #[test]
     fn can_jump_sequence() {
         let mut c = Checkers::from(
@@ -474,8 +628,4 @@ mod tests {
         assert_boardequal!(&c.board, &expect);
         assert_eq!(c.turn, Turn::White);
     }
-}
-
-fn main() {
-    println!("Hello!");
 }
