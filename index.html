@@ -3,7 +3,9 @@
 
 <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/png" href="checker-piece.PNG" />
+
     <title>Checkers</title>
     <style type="text/css">
         #container {
@@ -160,7 +162,7 @@
                     squareEl.classList.add("square");
                     squareEl.classList.toggle("odd", (i + j) % 2 == 0);
                     squareEl.innerHTML = "<div class='piece'><div class='K'>K</div></div>";
-                    squareEl.addEventListener("click", () => { square_clicked(i, j) })
+                    squareEl.addEventListener("mousedown", () => { square_clicked(i, j) })
                     rowEl.appendChild(squareEl);
                     board[i][j].el = squareEl;
                 }
