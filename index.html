@@ -4,10 +4,14 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/png" href="checker-piece.PNG" />
+    <link rel="icon" type="image/png" id="favicon" href="img/checker-piece.PNG" />
 
     <title>Checkers</title>
     <style type="text/css">
+        body.pear-theme {
+            background: url("img/pear-background.png") repeat;
+        }
+
         #container {
             width: 336px;
             margin: 10px auto;
@@ -31,12 +35,24 @@
             position: relative;
         }
 
+        .pear-theme .square {
+            background: url("img/pear-board.png") repeat #BBB;
+        }
+
         .square.odd {
             background: #EEE;
         }
 
+        .pear-theme .square.odd {
+            background: url("img/pear-board.png") repeat #EEE;
+        }
+
         .square.shown-step {
             background: rgb(161, 255, 161);
+        }
+
+        .pear-theme .square.shown-step {
+            background: url("img/pear-board.png") repeat rgb(161, 255, 161);
         }
 
         .piece {
@@ -50,6 +66,10 @@
             left: 3px;
             display: inline-block;
             cursor: default;
+        }
+
+        .pear-theme .piece {
+            background: url("img/pear-white.png") center #EEE;
         }
 
         .K {
@@ -70,6 +90,11 @@
             background: #888;
         }
 
+        .pear-theme .square[data-piece=b] .piece,
+        .pear-theme .square[data-piece=B] .piece {
+            background: url("img/pear-black.png") center #888;
+        }
+
         .square[data-piece=B] .K {
             display: block;
             color: #EEE;
@@ -79,14 +104,63 @@
             display: block;
             color: #444;
         }
+
+        .hidden {
+            display: none;
+        }
+
+        #settings-btn {
+            text-decoration: underline;
+            cursor: pointer;
+            color: blue;
+            font-family: sans-serif;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        #settings-block {
+            background-color: #EEE;
+            padding: 10px;
+            font-family: sans-serif;
+            font-size: 12px;
+        }
     </style>
 </head>
 
 <body>
     <div id="container">
         <div id="game"></div>
+        <div id="settings">
+            <div id="settings-btn">Open Settings</div>
+            <div id="settings-block" class="hidden">
+                <input type="checkbox" id="pear-theme-checkbox" /><label for="pear-theme-checkbox">Use pear
+                    theme</label>
+            </div>
+        </div>
     </div>
     <script type="module">
+        let settingsOpen = false;
+        document.querySelector("#settings-btn").addEventListener("click", function () {
+            settingsOpen = !settingsOpen;
+            if (settingsOpen) {
+                document.querySelector("#settings-block").classList.remove("hidden");
+                document.querySelector("#settings-btn").innerHTML = "Close Settings";
+            } else {
+                document.querySelector("#settings-block").classList.add("hidden");
+                document.querySelector("#settings-btn").innerHTML = "Open Settings";
+            }
+        });
+        let pearTheme = false;
+        document.querySelector("#pear-theme-checkbox").addEventListener("change", function () {
+            pearTheme = !pearTheme;
+            if (pearTheme) {
+                document.querySelector("#favicon").setAttribute("href", "img/pear-favicon.png");
+                document.body.classList.add("pear-theme");
+            } else {
+                document.querySelector("#favicon").setAttribute("href", "img/checker-piece.PNG");
+                document.body.classList.remove("pear-theme");
+            }
+        });
         import init, { Checkers } from "./pkg/checkers.js";
         init().then(() => {
             let checkers = new Checkers();
