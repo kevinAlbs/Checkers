@@ -105,6 +105,10 @@
             color: #444;
         }
 
+        .square.show-hint {
+            background: rgb(161, 249, 255);
+        }
+
         .hidden {
             display: none;
         }
@@ -168,6 +172,25 @@
             let selected = null; // or { i, j }
             let fixed = false;
 
+            function show_hints() {
+                // Flash a highlight on all squares that have steps.
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        if (checkers.get_steps(i, j).length > 0) {
+                            board[i][j].show_hint = true;
+                        }
+                    }
+                }
+                setTimeout(() => {
+                    for (let i = 0; i < 8; i++) {
+                        for (let j = 0; j < 8; j++) {
+                            board[i][j].show_hint = false;
+                        }
+                    }
+                    render();
+                }, 500);
+            }
+
             function clear_selected_square() {
                 if (fixed) {
                     return;
@@ -186,6 +209,9 @@
                 }
                 clear_selected_square();
                 let steps = checkers.get_steps(i, j);
+                if (steps.length == 0) {
+                    show_hints();
+                }
                 steps.forEach((step) => {
                     board[step.dst_i][step.dst_j].step = step;
                 });
@@ -219,7 +245,8 @@
                 for (let j = 0; j < 8; j++) {
                     row.push({
                         el: null, // Set later.
-                        step: null
+                        step: null,
+                        show_hint: false
                     })
                 }
                 board.push(row);
@@ -248,6 +275,7 @@
                         board[i][j].el.setAttribute("data-piece", checkers.at(i, j));
                         board[i][j].el.classList.toggle("shown-step", board[i][j].step != null);
                         board[i][j].el.classList.remove("selected");
+                        board[i][j].el.classList.toggle("show-hint", board[i][j].show_hint);
                     }
                 }
                 if (selected !== null) {
